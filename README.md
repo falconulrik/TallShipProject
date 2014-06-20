@@ -1,4 +1,4 @@
-SquareSailProject
+TallShipProject
 =================
 
-Project to create a square sail script system
+Project to create a tall ship script system
