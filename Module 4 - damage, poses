@@ -1,0 +1,352 @@
+integer chan=-9999;//comm channel set by HUD
+integer pingchannel = 56678798;
+integer prims;
+integer shout;
+integer col;
+string boatName;
+
+//DAMAGE SETTINGS
+integer health;//the initial total health or the number of hits the ship can withstand before death. 
+integer Hits=0; // The number of hits the ship has taken. Script will calculate this
+integer Steps=30;
+integer Threshold=20;//the number of hits when performance starts to degrade
+integer healthTweak=10;//reduces speed and agility progressively from 30% damage
+integer damageMass=1000;// sets minimum mass of objects that will cause collision damage. By way of reference, the Ardo has a mass of 9772 
+list memPrim;
+integer damage;
+getHealth()
+{
+    memPrim = llGetLinkPrimitiveParams(1,[PRIM_TEXTURE,0]);
+    vector spd_memory = (vector)llList2String(memPrim,1);
+    health= (integer)spd_memory.x;
+    llMessageLinked(LINK_THIS,health,"health",NULL_KEY);
+
+}
+
+setHealth()
+{
+    //["Texture name", <1.000000, 1.000000, 0.000000>, <0.000000, 0.000000, 0.000000>, 0.000000]
+                    
+    vector spd_memory = (vector)llList2String(memPrim,1);
+    spd_memory.x=(float)health;
+    llListReplaceList(memPrim, [spd_memory], 1,1);
+    llSetLinkPrimitiveParamsFast(1,[PRIM_TEXTURE,0,llList2String(memPrim,0),spd_memory,(vector)llList2String(memPrim,2),llList2Float(memPrim,3)]);
+    if(damage)
+    {
+        sayHealth();
+        
+    }
+    else
+    {
+        sayCruise();
+        
+    }
+}
+
+sayHealth()
+{
+    llSay(chan,"health"+(string)health);
+    llSay(pingchannel,"health"+(string)health);
+    llMessageLinked(LINK_SET, health, "health",NULL_KEY);
+    llSetLinkPrimitiveParamsFast(HEALTH,[PRIM_TEXT,"Health =" + (string)health, <1.0, 0.0, 0.0>, 1.0]);
+}
+
+sayCruise()
+{
+    llSay(chan,"cruise"+(string)health);
+    llSay(pingchannel,"cruise"+(string)health);
+    llMessageLinked(LINK_SET, health, "cruise",NULL_KEY);
+    llSetLinkPrimitiveParamsFast(HEALTH,[PRIM_TEXT,"CRUISE MODE", <1.0, 0.0, 0.0>, 1.0]);
+}
+
+integer HEALTH;
+
+getLinkNums() 
+{
+
+
+     integer i;
+    for (i=2;i<=prims;i++) 
+    {
+    string str=llGetLinkName(i);
+            if (str=="health") 
+            {
+                HEALTH=i;
+            }         
+    }
+    
+}
+
+default {
+    state_entry()
+    {
+        boatName = llGetObjectName();
+        prims = llGetNumberOfPrims();
+        getLinkNums();
+        getHealth();
+        setHealth();
+    }
+    on_rez(integer rezzed)
+    {
+        llResetScript();
+    }
+    link_message(integer sender, integer num, string msg, key id)
+    {
+        if (msg=="col") col = num;
+        else if (llToLower(msg)=="shout")shout = num;
+        else if (llToLower(msg) == "combat")
+        {
+            damage=num;
+            getHealth();
+            setHealth();
+            
+        }
+        else if ( llToLower(msg)=="reset")llResetScript();
+        else if(llToLower(msg) =="brace")//message sent every timer event from module 1 - use as a timer event here if needed
+        {
+            if(damage)sayHealth();
+            else sayCruise();
+        }
+    }
+    
+            ///////******health HIT EVENT
+      collision_start(integer num_detected)
+    {
+        if(damage)
+    {
+        if (llDetectedName(0) == "CannonBall"  && llDetectedOwner(0) !=llGetOwner())
+            
+        {
+            health = health-1;
+            setHealth();
+             if (health <=0 )
+            {
+                state incap;
+            }
+            if (health <= Steps)
+            {
+                Steps = health - 6;
+                if(!shout)llOwnerSay("Current health: " + (string)health);
+            
+                else if(shout)
+                {
+                    llSetObjectName(llKey2Name(llGetOwner()));
+                    llShout(0, "/me damaged, health now: " + (string)health);
+                    llSetObjectName(boatName);
+                }
+            }
+            if (health <=4 )
+            {
+                if(!shout)llOwnerSay("Your Ship is incapacitated... You'd better surrender!");
+                //llListenRemove(listener);
+                llSetVehicleType(VEHICLE_TYPE_NONE);
+                llSetStatus(STATUS_PHYSICS,FALSE);
+                llMessageLinked(LINK_SET,0,"incap",NULL_KEY);
+                if(shout)
+                {
+                    llSetObjectName(llKey2Name(llGetOwner()));
+                    llShout(0, "/me Incapacitated!");
+                    llSetObjectName(boatName);
+                }
+            }
+            
+            else if (health < 5)
+            {
+                healthTweak = 6;
+                llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+            }
+            else if(health <9 )llMessageLinked(LINK_SET,0,"smoke",NULL_KEY);
+            else if (health < 10)
+            {
+                healthTweak = 7;
+                llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+            } 
+            else if (health < 15)
+            {
+                healthTweak = 8;
+                llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+            } 
+            
+            else if (health < 20)
+            {
+                healthTweak = 9;
+                llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+            }  
+            
+        }
+        
+        else if (llDetectedOwner(0) != llGetOwner())
+        {
+            if(col)
+            {
+                float mass = llGetObjectMass(llDetectedKey(0));
+                if (health >0)
+                {
+                    if (mass > damageMass)health = health-6;
+                    else if (mass > damageMass/2)health = health-3;
+                    else if (mass > damageMass/5)health = health-1;
+                    if (health <0)health=0;
+                }
+                setHealth();
+                
+                if (health <=0 )
+                {
+                    state incap;
+                }
+                if (health <= Steps)
+                {
+                    Steps = health - 6;
+                    if(!shout)llOwnerSay("Current health: " + (string)health);
+            
+                    else if(shout)
+                    {
+                        llSetObjectName(llKey2Name(llGetOwner()));
+                        llShout(0, "/me damaged, health now: " + (string)health);
+                        llSetObjectName(boatName);
+                    }
+                }
+                if (health <=4 )
+                {
+                    if(!shout)llOwnerSay("Your Ship is incapacitated... You'd better surrender!");
+                    //llListenRemove(listener);
+                    llSetVehicleType(VEHICLE_TYPE_NONE);
+                    llSetStatus(STATUS_PHYSICS,FALSE);
+                    llMessageLinked(LINK_ALL_OTHERS,0,"incap",NULL_KEY);
+                    llMessageLinked(LINK_ALL_OTHERS,0,"cruise",NULL_KEY);
+                    if(shout)
+                    {
+                        llSetObjectName(llKey2Name(llGetOwner()));
+                        llShout(0, "/me is incapacitated...");
+                        llSetObjectName(boatName);
+                    }
+                }
+            
+                else if (health < 5)
+                {
+                    healthTweak = 6;
+                    llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+                }
+            //else if(health <9 )llMessageLinked(LINK_ALL_OTHERS,0,"smoke",NULL_KEY);
+                else if (health < 10)
+                {
+                    healthTweak = 7;
+                    llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+                } 
+                else if (health < 9)
+                {
+                    llMessageLinked(LINK_ALL_OTHERS,0,"incap",NULL_KEY);
+                } 
+                
+                else if (health < 15)
+                {
+                    healthTweak = 8;
+                    llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+                } 
+            
+                else if (health < 20)
+                {
+                    healthTweak = 9;
+                    llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+                }  
+
+            }
+        }
+    }
+
+    }
+    land_collision_start(vector pos)
+    {
+        if(damage)
+        {
+        if(col)
+        {
+            health = health-3;
+            if (health <0)health=0;
+            llOwnerSay("You ran aground, current health: " + (string)health);
+            setHealth();
+        }
+         
+         if (health <=0 )
+            {
+                state incap;
+            }
+            if (health <= Steps)
+            {
+                Steps = health - 6;
+                if(!shout)llOwnerSay("Current health: " + (string)health);
+            
+                else if(shout)
+                {
+                    llSetObjectName(llKey2Name(llGetOwner()));
+                    llShout(0, "/me damaged, health now: " + (string)health);
+                    llSetObjectName(boatName);
+                }
+            }
+            if (health <=4 )
+            {
+                if(!shout)llOwnerSay("Your Ship is incapacitated... You'd better surrender!");
+                llSetVehicleType(VEHICLE_TYPE_NONE);
+                llSetStatus(STATUS_PHYSICS,FALSE);
+               // llListenRemove(listener);
+                
+                //llMessageLinked(LINK_ALL_OTHERS,0,"cruise",NULL_KEY);
+                if(shout)
+                {
+                    llSetObjectName(llKey2Name(llGetOwner()));
+                    llShout(0, "/me incapacitated...");
+                    llSetObjectName(boatName);
+                }
+                llSleep(1.0);
+            }
+            
+            else if (health < 6)
+            {
+                healthTweak = 6;
+                llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+            }
+            else if (health < 10)
+            {
+                healthTweak = 7;
+                llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+            } 
+            else if (health < 15)
+            {
+                healthTweak = 8;
+                llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+            } 
+            
+            else if (health < 20)
+            {
+                healthTweak = 9;
+                llMessageLinked(LINK_SET,healthTweak,"healthTweak",NULL_KEY);
+            }    
+        
+    }
+}  
+    
+}
+
+
+
+state incap
+{
+    on_rez(integer rez)
+    {
+        llResetScript();
+    }
+    state_entry()
+    {
+        llMessageLinked(LINK_SET,0,"sinking",NULL_KEY);
+        llSetTimerEvent(120);
+        llSetVehicleType(VEHICLE_TYPE_AIRPLANE);
+        llSetStatus(STATUS_PHYSICS,TRUE);
+        llSetVehicleFloatParam(VEHICLE_BUOYANCY,0.9);
+        llSetBuoyancy(0.);
+        llOwnerSay("Your Ship has been destroyed... \nIt will delete itself in 2 minutes.");
+    }
+    
+    timer()
+    {
+        llDie();
+    }
+}
