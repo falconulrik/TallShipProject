@@ -44,66 +44,12 @@ default
         //llSetCameraEyeOffset(<0.0,0.0,0.0>);
         //llSetCameraAtOffset(<0.0,0.0,0.0>);  
         
-        ////UPDATE STUFF
-        
-        // save the product owner name for later
-        
-        ownerName = llKey2Name(llGetOwner());
-        
-        // check script has correct permissions for the next owner
-        
-        if (llGetInventoryPermMask(llGetScriptName(), MASK_NEXT) & PERM_TRANSFER) {llWhisper(0, "Warning! Transfer permissions are set on " + llGetScriptName() + "!");}
-        if (llGetInventoryPermMask(llGetScriptName(), MASK_NEXT) & PERM_MODIFY) {llWhisper(0, "Warning! Modify permissions are set on " + llGetScriptName() + "!");}
-        
-        // open XML-RPC channel --- when one is assigned, an update is checked for
-        llOpenRemoteDataChannel();
-    }
-    timer()
-    {
-        // request for item has timed out, so transmit that error code in case somebody want its
-        llSetTimerEvent(0);
-        llMessageLinked(LINK_SET, -2948813, "TIMEOUT", ""); return;
         
     }
+
     
-    remote_data(integer type, key channel, key message_id, string sender, integer idata, string sdata)
-    { 
-        if (type == REMOTE_DATA_CHANNEL)
-        {
-            // channel created 
-            
-            myRPC = channel; 
-                
-            // check for update
-                
-            check_for_update();
-            
-            return;
-        }
-        
-        if (type == REMOTE_DATA_REQUEST)
-        {
-            process_command(sdata);
-        }
-    }
-    
-    http_response(key id, integer err, list metadata, string body)
-    {        
-        if (err == 404 || err == 500)
-        {
-            retries++;
-            if (retries > 4) {retries = 0; last_url = ""; llMessageLinked(LINK_SET, -2948813, "HTTP PROBLEM", ""); llSetTimerEvent(0);}
-            if (last_url !="") {load_html(last_url);}
-        }
-        else
-        {
-            last_url = ""; retries = 0;
-            
-            // other stuff
-            process_command(body);
-        }
-    }
-        
+
+
     changed(integer change) 
     {
         
