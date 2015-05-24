@@ -1,0 +1,778 @@
+//rudder Variables and functions
+integer RUDDER;
+integer HEALTH;
+float rudderLimit = 0.5;
+float rateAdj = 1.0;//degrees per 0.1 seconds
+float steerRate = 0.01;//sets increments of turn variable
+float steerLimit = 0.5;//maximum value for the turn variable 0.5 was original
+vector rezEulRudder = <0,0,PI>;//rudder rotation on rez
+rotation rezRotRudder;
+rotation dRot;//rotation per step of rudder movment
+
+rotation rot;//rudder rotation when turning
+integer locked;//flag to lock out left/right rudder action from contros when rudder is auto-centering
+integer helm;//set port or starboard rudder movement
+float vel; //used to capture boat speed for steering reversal and waked control
+float turn;
+
+resetRudder()
+{
+    
+    llSetLinkPrimitiveParams(RUDDER, [PRIM_ROT_LOCAL,rezRotRudder]);//set the initial RUDDER possition
+    rot = rezRotRudder;//set rot to equal initial rudder position
+}
+moveRudder(integer helm)//helm = -1 for port, 1 for starboard
+{
+    turn +=steerRate*helm/2;
+    if(llFabs(turn)>rudderLimit)turn=rudderLimit*helm;
+    else if (llFabs(turn)<rudderLimit)llSetLinkPrimitiveParamsFast (RUDDER, [PRIM_ROT_LOCAL, llEuler2Rot(<0.0,0.0,turn>)*rezRotRudder]);
+
+}
+
+centreRudder(integer helm)
+{
+    locked = TRUE;
+    llMessageLinked(LINK_THIS,1,"lockrudder",NULL_KEY);
+
+                if(turn>0)
+                {
+                    while (turn>0)
+                    {
+                        turn -=steerRate;
+                        llSleep(0.01);
+                        llSetLinkPrimitiveParamsFast(RUDDER, [PRIM_ROT_LOCAL, llEuler2Rot(<0.0,0.0,turn>)*rezRotRudder]);
+                    }
+                    turn = 0.0;
+                }
+                else if(turn<0)
+                {
+                    while (turn<0)
+                    {
+                        turn +=steerRate;
+                        llSleep(0.01);
+                        llSetLinkPrimitiveParamsFast (RUDDER, [PRIM_ROT_LOCAL, llEuler2Rot(<0.0,0.0,turn>)*rezRotRudder]);
+                    }
+                    turn = 0.0;
+                }
+
+            locked = FALSE;
+            llMessageLinked(LINK_THIS,0,"lockrudder",NULL_KEY);
+            llSetLinkPrimitiveParams(RUDDER, [PRIM_ROT_LOCAL,rezRotRudder]);//set the initial RUDDER possition      
+}
+
+///////////////CAM STUFF/////////////////////////////
+integer listener;
+
+setCamera() {
+    llSetCameraEyeOffset(<0.0,0.0,0.0>); //Here you may set your Sailing Camera EYE Offset
+   llSetCameraAtOffset(<0.0,0.0,0.0>);    //Here you may set your Sailing Camera actual position
+}
+
+float cam_distance = 15.0;
+
+//Leda Sands, 2009
+//Added reset of trap toggle when another function selected, and reset to default when trap is toggled off.
+//Removed Spaz cam(what a name!!!) spin cam and disabled trap toggle.
+//Take camera control and set default preset if attached on state entry, on change and on attach
+//Removed multiple checks for permissions other than camera control
+//Added tightly controlled middle and distant presets
+//Added timeout for dialog to remove listener and reduce lag.
+integer CHANNEL = 66; // dialog channel2
+list MENU_MAIN = ["Custom","Settings","Cam OFF","Offset L","Offset R","Default" ,"Aft medium","Aft high", "Bow"]; // the main menu
+list MENU_2 = [ "Pitch +30", "Pitch -30", "Pitch +10", "Pitch -10",  "Pitch +5", "Pitch -5",   "...Back", "More..."]; // menu 2
+list MENU_3 = [ "Focus D +1", "Focus D -1", "Focus D -5", "Focus H +5", "Focus H -5", "Focus D +5", "Focus H +1", "Focus H -1","Tight", "Loose", " ...Back"];
+
+integer on = FALSE;
+//integer flying;
+//integer falling;
+integer trap = 0;
+integer x;
+float eye = 1.0;
+float pitch = 20;
+vector offset = <-5,0,2>;
+integer coupling;
+integer customcam;
+integer eyecam;
+
+string clip(float input) 
+    {
+        integer adjust=5;
+        string result=(string)input;
+        integer i=llStringLength(result);
+        return llDeleteSubString(result,i-adjust,i);
+    }
+
+take_camera_control(key agent)
+{
+    //llOwnerSay("take_camera_control"); // say function name for debugging
+    //llOwnerSay( (string)agent);
+    llRequestPermissions(agent, PERMISSION_CONTROL_CAMERA);
+    llSetCameraParams([CAMERA_ACTIVE, 1]); // 1 is active, 0 is inactive
+    on = TRUE;
+}
+
+release_camera_control(key agent)
+{
+    //llOwnerSay("release_camera_control"); // say function name for debugging
+    llSetCameraParams([CAMERA_ACTIVE, 0]); // 1 is active, 0 is inactive
+    llReleaseCamera(agent);
+    on = FALSE;
+}
+
+
+
+
+
+default_cam()
+{
+        //llOwnerSay("Default (centre)cam."); // say function name for debugging
+   llClearCameraParams(); // reset camera to default
+        llSleep(0.5);
+    llSetCameraParams([
+        CAMERA_ACTIVE, 1,
+        CAMERA_PITCH, 5.0, // (-45 to 80) degrees
+        CAMERA_BEHINDNESS_ANGLE, 0.0, // (0 to 180) degrees
+        CAMERA_BEHINDNESS_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_DISTANCE, 15.0, // originally 4.0( 0.5 to 10) meters
+        CAMERA_FOCUS_LAG, 0.01 , // (0 to 3) seconds
+        CAMERA_FOCUS_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_POSITION_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_POSITION_THRESHOLD, 0.05, // (0 to 4) meters
+        CAMERA_POSITION_LOCKED, FALSE,
+     CAMERA_FOCUS_OFFSET, <3.0,0.0,1.0> // (TRUE or FALSE)
+            ])';
+}
+
+offset_l()
+{
+        //llOwnerSay("Default (centre)cam."); // say function name for debugging
+   llClearCameraParams(); // reset camera to default
+        llSleep(0.5);
+    llSetCameraParams([
+        CAMERA_ACTIVE, 1,
+        CAMERA_PITCH, 5.0, // (-45 to 80) degrees
+        CAMERA_BEHINDNESS_ANGLE, 0.0, // (0 to 180) degrees
+        CAMERA_BEHINDNESS_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_DISTANCE, 15.0, // originally 4.0( 0.5 to 10) meters
+        CAMERA_FOCUS_LAG, 0.01 , // (0 to 3) seconds
+        CAMERA_FOCUS_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_POSITION_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_POSITION_THRESHOLD, 0.05, // (0 to 4) meters
+        CAMERA_POSITION_LOCKED, FALSE,
+     CAMERA_FOCUS_OFFSET, <3.0,2.0,1.0> // (TRUE or FALSE)
+            ])';
+}
+
+offset_r()
+{
+        //llOwnerSay("Default (centre)cam."); // say function name for debugging
+   llClearCameraParams(); // reset camera to default
+        llSleep(0.5);
+    llSetCameraParams([
+        CAMERA_ACTIVE, 1,
+        CAMERA_PITCH, 5.0, // (-45 to 80) degrees
+        CAMERA_BEHINDNESS_ANGLE, 0.0, // (0 to 180) degrees
+        CAMERA_BEHINDNESS_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_DISTANCE, 15.0, // originally 4.0( 0.5 to 10) meters
+        CAMERA_FOCUS_LAG, 0.01 , // (0 to 3) seconds
+        CAMERA_FOCUS_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_POSITION_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_POSITION_THRESHOLD, 0.05, // (0 to 4) meters
+        CAMERA_POSITION_LOCKED, FALSE,
+     CAMERA_FOCUS_OFFSET, <3.0,-2.0,1.0> // (TRUE or FALSE)
+            ])';
+}
+        
+bow()
+{
+        //llOwnerSay("Default (centre)cam."); // say function name for debugging
+   llClearCameraParams(); // reset camera to default
+        llSleep(0.5);
+    llSetCameraParams([
+        CAMERA_ACTIVE, 1,
+        CAMERA_PITCH, 0.0, // (-45 to 80) degrees
+        CAMERA_BEHINDNESS_ANGLE, 0.0, // (0 to 180) degrees
+        CAMERA_BEHINDNESS_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_DISTANCE, 0.5, // originally 4.0( 0.5 to 10) meters
+        CAMERA_FOCUS_LAG, 0.01 , // (0 to 3) seconds
+        CAMERA_FOCUS_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_POSITION_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_POSITION_THRESHOLD, 0.05, // (0 to 4) meters
+        CAMERA_POSITION_LOCKED, FALSE,
+     CAMERA_FOCUS_OFFSET, <10.0,0.0,1.5> // (TRUE or FALSE)
+            ])';
+}
+
+aftm()
+{
+        //llOwnerSay("Default (centre)cam."); // say function name for debugging
+   llClearCameraParams(); // reset camera to default
+        llSleep(0.5);
+    llSetCameraParams([
+        CAMERA_ACTIVE, 1,
+        CAMERA_PITCH, 15.0, // (-45 to 80) degrees
+        CAMERA_BEHINDNESS_ANGLE, 0.0, // (0 to 180) degrees
+        CAMERA_BEHINDNESS_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_DISTANCE, 10.0, // originally 4.0( 0.5 to 10) meters
+        CAMERA_FOCUS_LAG, 0.01 , // (0 to 3) seconds
+        CAMERA_FOCUS_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_POSITION_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_POSITION_THRESHOLD, 0.05, // (0 to 4) meters
+        CAMERA_POSITION_LOCKED, FALSE,
+     CAMERA_FOCUS_OFFSET, <0.0,0.0,2.0> // (TRUE or FALSE)
+            ])';
+}
+
+afth()
+{
+        //llOwnerSay("Default (centre)cam."); // say function name for debugging
+   llClearCameraParams(); // reset camera to default
+        llSleep(0.5);
+    llSetCameraParams([
+        CAMERA_ACTIVE, 1,
+        CAMERA_PITCH, 35.0, // (-45 to 80) degrees
+        CAMERA_BEHINDNESS_ANGLE, 0.0, // (0 to 180) degrees
+        CAMERA_BEHINDNESS_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_DISTANCE, 10.0, // originally 4.0( 0.5 to 10) meters
+        CAMERA_FOCUS_LAG, 0.01 , // (0 to 3) seconds
+        CAMERA_FOCUS_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_POSITION_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_POSITION_THRESHOLD, 0.05, // (0 to 4) meters
+        CAMERA_POSITION_LOCKED, FALSE,
+     CAMERA_FOCUS_OFFSET, <0.0,0.0,5.0> // (TRUE or FALSE)
+            ])';
+}
+
+ 
+ custom_cam_1()
+{
+    //llOwnerSay("Custom cam 1. Pitch = " + (string)pitch); // say function name for debugging
+    llClearCameraParams(); // reset camera to default
+    llSetCameraParams([
+        CAMERA_ACTIVE, 1,
+        CAMERA_PITCH, pitch, // (-45 to 80) degrees
+        CAMERA_BEHINDNESS_ANGLE, 0.01, // (0 to 180) degrees
+        CAMERA_BEHINDNESS_LAG, 0.05, // (0 to 3) seconds
+        CAMERA_DISTANCE, 8.0, // ( 0.5 to 10) meters
+        CAMERA_FOCUS_LAG, 0.01 , // (0 to 3) seconds
+        CAMERA_FOCUS_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_POSITION_LAG, 0.01, // (0 to 3) seconds
+        CAMERA_POSITION_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_FOCUS_OFFSET, offset // <-10,-10,-10> to <10,10,10> meters
+            ]);
+}
+custom_cam_2()
+{
+    //llOwnerSay("Custom cam 2. Pitch = " + (string)pitch); // say function name for debugging
+    llClearCameraParams(); // reset camera to default
+    llSetCameraParams([
+        CAMERA_ACTIVE, 1, // 1 is active, 0 is inactive
+        CAMERA_BEHINDNESS_ANGLE, 45.0, // (0 to 180) degrees
+        CAMERA_BEHINDNESS_LAG, 0.5, // (0 to 3) seconds
+        CAMERA_DISTANCE, 8.0, // ( 0.5 to 10) meters
+        //CAMERA_FOCUS, <0,0,5>, // region relative position
+        CAMERA_FOCUS_LAG, 0.05 , // (0 to 3) seconds
+        CAMERA_FOCUS_LOCKED, FALSE, // (TRUE or FALSE)
+        CAMERA_FOCUS_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_PITCH, pitch, // (-45 to 80) degrees
+        //CAMERA_POSITION, <0,0,0>, // region relative position
+        CAMERA_POSITION_LAG, 0.1, // (0 to 3) seconds
+        CAMERA_POSITION_LOCKED, FALSE, // (TRUE or FALSE)
+        CAMERA_POSITION_THRESHOLD, 0.0, // (0 to 4) meters
+        CAMERA_FOCUS_OFFSET, offset // <-10,-10,-10> to <10,10,10> meters
+            ]);
+}
+
+getLinkNums() {
+     integer i;
+    integer linkcount=llGetNumberOfPrims();
+    for (i=1;i<=linkcount;i++) {
+    string str=llGetLinkName(i);
+    if (str == "health") HEALTH = i;
+    if(str=="rudder")
+    {
+             RUDDER = i;
+        }     
+    }
+}
+// rudder message - turn rudder or centre rudder num is direction, then do move rudder
+default
+{
+
+    state_entry()
+    {
+        getLinkNums();
+        rezRotRudder = llEuler2Rot(rezEulRudder);
+        resetRudder();
+        
+    }
+
+    changed(integer change)
+    {
+        if (change & CHANGED_LINK)
+        {
+                key agent = llAvatarOnSitTarget();
+            
+                if (agent == llGetOwner())
+                {               
+                    llRequestPermissions(agent,PERMISSION_CONTROL_CAMERA);
+                } 
+        }
+        if (change & CHANGED_OWNER)llResetScript();
+    }
+
+    run_time_permissions(integer perm)
+    {
+        if (perm & PERMISSION_CONTROL_CAMERA) {
+            llSetCameraParams([CAMERA_ACTIVE, 1]); // 1 is active, 0 is inactive
+            on = TRUE;
+            default_cam();
+            
+        }
+    }
+
+    listen(integer channel, string name, key id, string message)
+    {
+        
+ //////////////////////////CAM STUFF/////////////////////////////
+ 
+    if (message == "Settings")
+            {
+                llOwnerSay("Current settings:");
+                llDialog(id, "Custom", MENU_2, CHANNEL); // present submenu on request
+                llOwnerSay("Pitch "+ (string)pitch + " degrees");
+                llOwnerSay("Focus height offset (x) = "+ (string)((integer)offset.z) + " metres");
+                llOwnerSay("Focus distance offset (z) = "+ (string)((integer)offset.x) + " metres");
+                
+                
+            }
+            else if (message =="More...")
+            {
+                llDialog(id, "Custom", MENU_3, CHANNEL); // present submenu on request
+            }
+            else if (message == "...Back")
+                llDialog(id, "Select camera preset or customise settings:", MENU_MAIN, CHANNEL); // present main menu on request to go back
+            else if (message == " ...Back")
+                llDialog(id, "Select camera preset or customise settings:", MENU_2, CHANNEL); // present main menu on request to go back
+
+
+            else if (message == "Cam OFF")
+            {
+                release_camera_control(id);
+                trap=0;
+                customcam=0;
+                eyecam=0;
+            }
+            
+            else if (message == "Reset")
+            llResetScript();
+            
+            else if(message =="Custom")
+            {
+                if (coupling ==0)
+                custom_cam_1();
+                else if (coupling ==1)
+                custom_cam_2();
+                customcam=1;
+                eyecam=0;
+            }
+
+             else if (message == "Default")
+            {
+                
+            release_camera_control(id);
+                trap=0;
+                customcam=0;
+                eyecam=0;
+                if (coupling ==0)
+                custom_cam_1();
+                else if (coupling ==1)
+                custom_cam_2();
+                customcam=1;
+                eyecam=0;
+                //float orig_distance = cam_distance;
+                //cam_distance = 5.0;
+                default_cam();
+                //cam_distance = orig_distance;
+                default_cam();
+                
+                trap=0;
+                customcam=0;
+                eyecam=0;
+            }
+            
+            else if (message =="Offset L")
+            {
+             //default_cam();
+
+                trap=0;
+                customcam=0;
+                eyecam=0;
+                //float orig_distance = cam_distance;
+                //cam_distance = 5.0;
+                default_cam();
+                //cam_distance = orig_distance;
+                //llClearCameraParams();
+                llSleep(0.5);
+                offset_l();
+            }
+            else if (message =="Offset R")
+            {
+
+                //default_cam();
+
+                trap=0;
+                customcam=0;
+                eyecam=0;
+                //float orig_distance = cam_distance;
+                //cam_distance = 5.0;
+                default_cam();
+                //cam_distance = orig_distance;
+                //llClearCameraParams();
+                llSleep(0.5);
+                offset_r();
+            }
+            
+            else if (message =="Bow")
+            {
+
+                //default_cam();
+
+                trap=0;
+                customcam=0;
+                eyecam=0;
+                //float orig_distance = cam_distance;
+                //cam_distance = 5.0;
+                default_cam();
+                //cam_distance = orig_distance;
+                //llClearCameraParams();
+                llSleep(0.5);
+                bow();
+            }
+            
+            else if (message =="Aft medium")
+            {
+
+                //default_cam();
+
+                trap=0;
+                customcam=0;
+                eyecam=0;
+                //float orig_distance = cam_distance;
+                //cam_distance = 5.0;
+                default_cam();
+                //cam_distance = orig_distance;
+                //llClearCameraParams();
+                llSleep(0.5);
+                aftm();
+            }
+            
+        else if (message =="Aft high")
+            {
+
+                //default_cam();
+
+                trap=0;
+                customcam=0;
+                eyecam=0;
+                //float orig_distance = cam_distance;
+                //cam_distance = 5.0;
+                default_cam();
+                //cam_distance = orig_distance;
+                //llClearCameraParams();
+                llSleep(0.5);
+                afth();
+            }
+
+
+
+
+
+            else if (message == "Pitch +5")
+            {
+                pitch += 5;
+                if (pitch >180)
+                pitch = 180;
+                if( pitch<-45)
+                pitch = -45;
+                trap=0;
+                llDialog(id, "Custom", MENU_2, CHANNEL);
+                llOwnerSay("Pitch "+ (string)pitch + " degrees");
+                if (customcam)
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Pitch -5")
+            {
+                pitch -= 5;
+                if (pitch >180)
+                pitch = 180;
+                if( pitch<-45)
+                pitch = -45;
+                trap=0;
+                llDialog(id, "Custom", MENU_2, CHANNEL);
+                llOwnerSay("Pitch "+ (string)pitch + " degrees");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Pitch +10")
+            {
+                pitch += 10;
+                if (pitch >180)
+                pitch = 180;
+                if( pitch<-45)
+                pitch = -45;
+                trap=0;
+                llDialog(id, "Custom", MENU_2, CHANNEL);
+                llOwnerSay("Pitch "+ (string)pitch + " degrees");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Pitch -10")
+            {
+                pitch -=10;
+                if (pitch >180)
+                pitch = 180;
+                if( pitch<-45)
+                pitch = -45;
+                trap=0;
+                llDialog(id, "Custom", MENU_2, CHANNEL);
+                llOwnerSay("Pitch "+ (string)pitch + " degrees");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Pitch +30")
+            {
+                pitch += 30;
+                if (pitch >180)
+                pitch = 180;
+                if( pitch<-45)
+                pitch = -45;
+                trap=0;
+                llDialog(id, "Custom", MENU_2, CHANNEL);
+                llOwnerSay("Pitch "+ (string)pitch + " degrees");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Pitch -30")
+            {
+                pitch -= 30;
+                if (pitch >180)
+                pitch = 180;
+                if( pitch<-45)
+                pitch = -45;
+                trap=0;
+                llDialog(id, "Custom", MENU_2, CHANNEL);
+                llOwnerSay("Pitch "+ (string)pitch + " degrees");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Focus H +1")
+            {
+                offset.z += 1;
+                if (offset.z >10)
+                offset.z=10;
+                if(offset.z<-10)
+                offset.z = -10;
+                trap=0;
+                llDialog(id, "Custom", MENU_3, CHANNEL);
+                llOwnerSay("Focus height offset (z) = "+ (string)((integer)offset.z) + " metres");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Focus H -1")
+            {
+                offset.z -= 1;
+                if (offset.z >10)
+                offset.z=10;
+                if(offset.z<-10)
+                offset.z = -10;
+                trap=0;
+                llDialog(id, "Custom", MENU_3, CHANNEL);
+                llOwnerSay("Focus height offset (z) = "+ (string)((integer)offset.z) + " metres");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Focus H +5")
+            {
+                offset.z += 5;
+                if (offset.z >10)
+                offset.z=10;
+                if(offset.z<-10)
+                offset.z = -10;
+                trap=0;
+                llDialog(id, "Custom", MENU_3, CHANNEL);
+                llOwnerSay("Focus height offset (z) = "+ (string)((integer)offset.z) + " metres");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Focus H -5")
+            {
+                offset.z -= 5;
+                if (offset.z >10)
+                offset.z=10;
+                if(offset.z<-10)
+                offset.z = -10;
+                trap=0;
+                llDialog(id, "Custom", MENU_3, CHANNEL);
+                llOwnerSay("Focus height offset (z) = "+ (string)((integer)offset.z) + " metres");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Focus D +1")
+            {
+                offset.x += 1;
+                if(offset.x >10)
+                offset.x =10;
+                if(offset.x<-10)
+                offset.x = -10;
+                trap=0;
+                llDialog(id, "Custom", MENU_3, CHANNEL);
+                llOwnerSay("Focus distance offset (x) = "+ (string)((integer)offset.x) + " metres");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Focus D -1")
+            {
+                offset.x -= 1;
+                if(offset.x >10)
+                offset.x =10;
+                if(offset.x<-10)
+                offset.x = -10;
+                trap=0;
+                llDialog(id, "Custom", MENU_3, CHANNEL);
+                llOwnerSay("Focus distance offset (x) = "+ (string)((integer)offset.x) + " metres");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Focus D +5")
+            {
+                offset.x += 5;
+                if(offset.x >10)
+                offset.x =10;
+                if(offset.x<-10)
+                offset.x = -10;
+                trap=0;
+                llDialog(id, "Custom", MENU_3, CHANNEL);
+                llOwnerSay("Focus distance offset (x) = "+ (string)((integer)offset.x) + " metres");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Focus D -5")
+            {
+                offset.x -= 5;
+                if(offset.x >10)
+                offset.x =10;
+                if(offset.x<-10)
+                offset.x = -10;
+                trap=0;
+                llDialog(id, "Custom", MENU_3, CHANNEL);
+                llOwnerSay("Focus distance offset (x) = "+ (string)((integer)offset.x) + " metres");
+                {
+                    if (coupling ==0)
+                    custom_cam_1();
+                    else if (coupling ==1)
+                    custom_cam_2();
+                }
+            }
+            else if (message == "Tight")
+            {
+            custom_cam_1();
+            coupling = 0;
+            }
+            else if (message =="Loose")
+            {
+            custom_cam_2();
+            coupling = 1;
+            }
+            
+            //llListenRemove(x);
+            //llSetTimerEvent(0);
+            //llOwnerSay("Dialog has cancelled listener");
+
+        }
+ //////////////////////////END OF CAM STUFF//////////////////////
+
+    
+    touch_start(integer touched)
+    {
+        if (llDetectedLinkNumber(0) == HEALTH)
+        {
+            //llSay(0,"Cam prim touched");
+            if(llDetectedKey(0)==llGetOwner())
+            {
+                llDialog(llGetOwner(),  "Select camera preset or customise settings:", MENU_MAIN, CHANNEL);
+                listener = llListen(CHANNEL, "", llGetOwner(),"");
+                llSetTimerEvent(30);
+            }
+        }
+        
+    }
+    link_message(integer sender, integer num, string str, key id)
+    {
+
+        if(str=="moverudder")moveRudder(num);
+        else if (str=="centrerudder")centreRudder(num);
+        else if(llToLower(str) =="brace")//message sent every timer event from module 1 - use as a timer event here if needed
+        {
+            //do any timer stuff here
+        }
+        else if(llToLower(str) =="reset")llResetScript();
+    }
+    timer()
+    {
+        llListenRemove(listener);
+    }
+}

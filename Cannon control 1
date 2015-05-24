@@ -1,0 +1,678 @@
+// Development of an original script by Henry Morgan (Hayez Avril)
+
+integer pingchan = 56678798;
+integer gunnerchan;
+integer gunnerhandle;
+integer timer_on = FALSE;
+key owner;
+integer stern;
+integer bow;
+list cannons;
+integer upturn = 0;
+integer sideturn = 0;
+integer upturnp = 0;
+integer sideturnp = 0;
+integer upturnb = 0;
+integer sideturnb = 0;
+integer upturns = 0;
+integer sideturns = 0;
+float angle_increment = 2.5;
+integer bow_cannons_allowed = 2;
+integer rear_cannons_allowed = 0;
+integer port_cannons_allowed = 9;
+integer star_cannons_allowed = 9;
+integer reverse = 1;
+integer combat = 1;
+
+
+
+
+//string ammotype="Mball";
+string ammotype="CannonBall";
+
+integer i;
+integer length;
+
+float SPEED         = 60;         
+integer LIFETIME    = 5;            
+integer DELAY       = 15;          
+vector vel;                        
+vector pos;                        
+rotation rot;
+
+fire(integer link_number)
+{
+    
+        list para = llGetLinkPrimitiveParams(link_number,[PRIM_ROTATION,PRIM_DESC]); 
+        string ready = llList2String(para,1);
+        if (ready != "ready")
+            return;
+        else
+        {
+        rot =  llList2Rot(para,0);
+        vel = llRot2Fwd(rot) * reverse;
+        
+        para = llGetLinkPrimitiveParams(link_number,[PRIM_POSITION]);
+        pos = llList2Vector(para,0);
+        pos = pos + vel;
+        pos.z += 0.0;
+        vel = vel * SPEED;
+        //llTriggerSound("bad757db-3ec6-213b-5c1b-01137f9a3480", 1.0);//HM's sound
+        llTriggerSound("b6d0b6ea-34b4-2920-18b1-56bbe3529d87", 1.0);
+        llRezObject(ammotype, pos, vel, rot, LIFETIME); 
+        llSetLinkPrimitiveParamsFast(link_number,[PRIM_DESC,(string)DELAY,PRIM_TEXT,"Reloading... \n",<1,1,1>,1.0]);
+         if(timer_on==FALSE){
+          llSetTimerEvent(1);
+          timer_on==TRUE;
+         }  
+        
+        }
+        
+    
+}
+
+setAlpha(integer linknumber,integer flag){
+  
+   list color = llGetLinkPrimitiveParams(linknumber,[PRIM_COLOR,ALL_SIDES]);
+   llSetLinkPrimitiveParamsFast(linknumber,[PRIM_COLOR,ALL_SIDES,llList2Vector(color,0),flag]);       
+    
+}    
+
+lockCannons(integer locked){
+   
+   string lockedcannons = "";  
+   length = llGetListLength(cannons);
+   integer link_number = 0;
+   for (i = 0; i < length; i=i+3)
+   {
+    link_number = llList2Integer(cannons, i+1);
+    if(locked){
+     if(llList2String(llGetLinkPrimitiveParams(link_number,[PRIM_DESC]),0)!="droped"){     
+      setAlpha(link_number,0);
+      llSetLinkPrimitiveParamsFast(link_number,[PRIM_DESC,"locked"]);
+      lockedcannons +=  llList2String(cannons, i) + ",";
+     }
+    }else{
+     if(llList2String(llGetLinkPrimitiveParams(link_number,[PRIM_DESC]),0)!="droped"){  
+      setAlpha(link_number,1);
+      llSetLinkPrimitiveParamsFast(link_number,[PRIM_DESC,"ready"]);
+      lockedcannons +=  llList2String(cannons, i) + ",";
+     } 
+    }      
+   }    
+    
+   if(locked)  
+    llMessageLinked(LINK_ROOT,9000,lockedcannons,"");
+   else
+    llMessageLinked(LINK_ROOT,9001,lockedcannons,"");
+    
+}    
+
+
+reset(string side)
+{
+    
+    length = llGetListLength(cannons);
+    for (i = 0; i < length; i+=3)
+    {
+        if (llGetSubString(llList2String(cannons, i),0,2) == side)
+        {
+            rotation linkrot = llList2Rot(cannons,i+2);
+            integer linknum = llList2Integer(cannons,i+1);
+            if(side =="prt" )llSetLinkPrimitiveParamsFast(linknum,[PRIM_ROT_LOCAL,linkrot*llEuler2Rot(<0,0,90>*DEG_TO_RAD)]);
+            else if(side =="stb") llSetLinkPrimitiveParamsFast(linknum,[PRIM_ROT_LOCAL,linkrot*llEuler2Rot(<0,0,-90>*DEG_TO_RAD)]);
+            else if(side =="bow") llSetLinkPrimitiveParamsFast(linknum,[PRIM_ROT_LOCAL,linkrot*llEuler2Rot(<0,-90,-180>*DEG_TO_RAD)]);
+        }
+    }
+}
+
+getDropedCannons()
+{
+    string dropedcannons = "";
+    length = llGetListLength(cannons);
+    integer link_number;
+    for (i = 0; i < length; i+=3)
+    {
+           link_number = llList2Integer(cannons, i+1); 
+           if (llList2String(llGetLinkPrimitiveParams(link_number,[PRIM_DESC]),0)=="droped" || llList2String(llGetLinkPrimitiveParams(link_number,[PRIM_DESC]),0)=="locked"){
+             dropedcannons +=  llList2String(cannons, i) + ",";
+           }     
+        
+    }
+    
+    llMessageLinked(LINK_ROOT,9000,dropedcannons,"");
+    
+}
+
+
+
+
+turncannons(string Side, vector angle, float sideangle)
+{
+    
+    length = llGetListLength(cannons);
+    for (i = 0; i < length; i+=3)
+    {
+        if (llGetSubString(llList2String(cannons, i),0,2) == Side)
+        {
+            integer linknum = llList2Integer(cannons, i+1);
+            list linkrotlist = llGetLinkPrimitiveParams(linknum,[PRIM_ROT_LOCAL]);
+            rotation linkrot = llList2Rot(linkrotlist,0);
+            rotation new_rot = linkrot*llAxisAngle2Rot(angle, sideangle*DEG_TO_RAD);
+            llSetLinkPrimitiveParamsFast(linknum,[PRIM_ROT_LOCAL,new_rot]);
+        }
+    }
+}
+
+linkcannons(){
+    
+        cannons = [];
+        integer linkcount=llGetNumberOfPrims();
+        integer bow_count = 0;
+        integer rear_count = 0;
+        integer port_count = 0;
+        integer star_count = 0;
+        for (i=1;i<=linkcount;++i) 
+        {
+            llSetLinkPrimitiveParamsFast(i,[PRIM_TEXT,"",<1,1,1>,1.0]);
+            string des=llGetLinkName(i);
+            string str=llGetSubString(des,0,2);
+            
+            
+            
+            list linkrotlist = llGetLinkPrimitiveParams(i,[PRIM_ROT_LOCAL]);
+            //rotation linkrot = llList2Rot(linkrotlist,0);
+            rotation linkrot;
+            if (str == "prt" && port_count < port_cannons_allowed)
+            {
+                linkrot =  <1,0,0,1>;
+                integer cannon = i;
+                cannons = cannons+des+cannon+linkrot;
+                llSetLinkPrimitiveParamsFast(i,[PRIM_DESC,"ready"]);
+                setAlpha(i,1);
+                port_count++;
+            }
+            else if (str == "stb" && star_count < star_cannons_allowed)
+            {
+                linkrot =  <-1,0,0,1>;
+                integer cannon = i;
+                cannons = cannons+des+cannon+linkrot;
+                llSetLinkPrimitiveParamsFast(i,[PRIM_DESC,"ready"]);
+                setAlpha(i,1);
+                star_count++;
+            }
+            else if (str == "bow" && bow_count < bow_cannons_allowed)
+            {
+                linkrot =  <-1,0,1,0>;
+                integer cannon = i;
+                cannons = cannons+des+cannon+linkrot;
+                llSetLinkPrimitiveParamsFast(i,[PRIM_DESC,"ready"]);
+                setAlpha(i,1);
+                bow_count++;
+            }
+            else if (str == "stn" && rear_count < rear_cannons_allowed)
+            {
+                linkrot =  <-1,0,-1,0>;
+                integer cannon = i;
+                cannons = cannons+des+cannon+linkrot;
+                llSetLinkPrimitiveParamsFast(i,[PRIM_DESC,"ready"]);
+                setAlpha(i,1);
+                rear_count++;
+            }
+            else if (des == "stern")
+            {
+              stern = i;  
+            }
+            else if (des == "bow")
+            {
+              bow = i;  
+            }
+            
+              
+        }
+    
+        //llOwnerSay("Allowed Cannons : Port : " + (string)port_cannons_allowed + " : Startboard : " + (string)star_cannons_allowed + " Bow : " + (string)bow_cannons_allowed + " Rear : " + (string)rear_cannons_allowed);
+
+        lockCannons(FALSE);
+}
+
+default
+{
+    state_entry()
+    {
+        llListen(pingchan,"","","");
+        llSetTimerEvent(0.0);
+        linkcannons();
+        
+    }
+
+           
+    listen(integer channel, string name, key id, string str)
+    {
+       if((channel == pingchan)){
+           if(llGetSubString(str,0,3)=="chan")
+           {
+               string name = llGetObjectName();
+               string shipname = llGetLinkName(1);
+               llSetObjectName(shipname);
+        
+            gunnerchan = (integer) llGetSubString(str,4,-1);
+            //llListenRemove(gunnerhandle);  
+            gunnerhandle = llListen(gunnerchan,"","","");
+            llMessageLinked(LINK_SET,gunnerchan,"chan",NULL_KEY);
+            llSay(0,"Cannons Loaded..... " + llKey2Name(llGetOwnerKey(id)));
+            llSetObjectName(name);
+        }
+         
+         
+       }
+       else if (combat)
+       {
+        if (str == "lefts" && sideturn < 4 )
+       {
+            turncannons("stb", <0.0,0.0,1.0>, angle_increment);
+            sideturn++;
+        }
+        else if (str == "rights" && sideturn > -4)
+        {
+            turncannons("stb",<0.0,0.0,1.0>, -angle_increment);
+            sideturn--;
+        }
+        else if (str == "ups" && upturn < 4 )
+        {
+            turncannons("stb",<1.0,0.0,0.0>, -angle_increment);
+            upturn++;
+        }
+        else if (str == "downs" && upturn > -4 )
+        {
+            turncannons("stb",<1.0,0.0,0.0>, angle_increment);
+            upturn--;
+        }
+        else if (str == "calibrates")
+        {
+            reset("stb");
+            upturn = 0;
+            sideturn = 0;
+        }
+        
+        else if (str=="sset1")
+        {
+            length = llGetListLength(cannons);
+            for (i = 0; i < length; i=i+3)
+            {
+                string temp = llGetSubString(llList2String(cannons, i),0,3);
+                if (temp=="stb1"||temp == "stb2"||temp=="stb3")
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            } 
+        }
+        else if (str=="sset2")
+        {
+            length = llGetListLength(cannons);
+            for (i = 0; i < length; i=i+3)
+            {
+                string temp = llGetSubString(llList2String(cannons, i),0,3);
+                if (temp=="stb4"||temp == "stb5"||temp=="stb6")
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            } 
+        }
+        else if (str=="sset3")
+        {
+            length = llGetListLength(cannons);
+            for (i = 0; i < length; i=i+3)
+            {
+                string temp = llGetSubString(llList2String(cannons, i),0,3);
+                if (temp=="stb7"||temp == "stb8"||temp=="stb9")
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            } 
+        }
+        
+        
+            else if(str=="starboard") {
+           length = llGetListLength(cannons);
+           for (i = 0; i < length; i=i+3)
+            {
+                if (llGetSubString(llList2String(cannons, i),0,2)=="stb")
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            }        
+            
+        }    
+        //
+        else if (str == "leftp" && sideturnp < 4 )
+        {
+            turncannons("prt", <0.0,0.0,1.0>, angle_increment);
+            sideturnp++;
+        }
+        else if (str == "rightp" && sideturnp > -4)
+        {
+            turncannons("prt",<0.0,0.0,1.0>, -angle_increment);
+            sideturnp--;
+        }
+        else if (str == "upp" && upturnp < 4 )
+        {
+            turncannons("prt",<1.0,0.0,0.0>, angle_increment);
+            upturnp++;
+        }
+        else if (str == "downp" && upturnp > -4 )
+        {
+            turncannons("prt",<1.0,0.0,0.0>, -angle_increment);
+            upturnp--;
+        }
+        else if (str == "calibratep")
+        {
+            reset("prt");
+            upturnp = 0;
+            sideturnp = 0;
+        }
+        
+        
+        else if(str=="portside") 
+        {
+           length = llGetListLength(cannons);
+           for (i = 0; i < length; i=i+3)
+            {
+                if (llGetSubString(llList2String(cannons, i),0,2)=="prt")
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            }        
+            
+        } 
+        else if (str=="pset1")
+        {
+            length = llGetListLength(cannons);
+            for (i = 0; i < length; i=i+3)
+            {
+                string temp = llGetSubString(llList2String(cannons, i),0,3);
+                if (temp=="prt1"||temp == "prt2"||temp=="prt3")
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            } 
+        } 
+        else if (str=="pset2")
+        {
+            length = llGetListLength(cannons);
+            for (i = 0; i < length; i=i+3)
+            {
+                string temp = llGetSubString(llList2String(cannons, i),0,3);
+                if (temp=="prt4"||temp == "prt5"||temp=="prt6")
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            } 
+        } 
+        
+          else if (str=="pset3")
+        {
+            length = llGetListLength(cannons);
+            for (i = 0; i < length; i=i+3)
+            {
+                string temp = llGetSubString(llList2String(cannons, i),0,3);
+                if (temp=="prt7"||temp == "prt8"||temp=="prt9")
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            } 
+        }   
+        //
+        else if (str == "leftb" && sideturnb < 4 )
+        {
+            turncannons("bow", <0.0,0.0,1.0>, angle_increment);
+            sideturnb++;
+        }
+        else if (str == "rightb" && sideturnb > -4)
+        {
+            turncannons("bow",<0.0,0.0,1.0>, -angle_increment);
+            sideturnb--;
+        }
+        else if (str == "upb" && upturnb < 4 )
+        {
+            turncannons("bow",<0.0,1.0,0.0>, -angle_increment);
+            upturnb++;
+        }
+        else if (str == "downb" && upturnb > -2 )
+        {
+            turncannons("bow",<0.0,1.0,0.0>, angle_increment);
+            upturnb--;
+        }
+        else if (str == "calibrateb")
+        {
+            reset("bow");
+            upturnb = 0;
+            sideturnb = 0;
+        }
+        //
+        else if (str == "leftr" && sideturns < 4 )
+        {
+            turncannons("stn", <0.0,0.0,1.0>, angle_increment);
+            sideturns++;
+        }
+        else if (str == "rightr" && sideturns > -4)
+        {
+            turncannons("stn",<0.0,0.0,1.0>, -angle_increment);
+            sideturns--;
+        }
+        else if (str == "upr" && upturns < 4 )
+        {
+            turncannons("stn",<0.0,1.0,0.0>, angle_increment);
+            upturns++;
+        }
+        else if (str == "downr" && upturns > -2 )
+        {
+            turncannons("stn",<0.0,1.0,0.0>, -angle_increment);
+            upturns--;
+        }
+        else if (str == "calibrater")
+        {
+            reset("stn");
+            upturns = 0;
+            sideturns = 0;
+        }else
+        
+        {
+                
+           length = llGetListLength(cannons);
+           for (i = 0; i < length; i=i+3)
+            {
+                if (str == llList2String(cannons, i))
+                {
+                    fire(llList2Integer(cannons, i+1));
+                }
+            }    
+         }
+                
+            
+           if(str=="round"){
+             ammotype="CannonBall";
+             llShout(0,"Changing Ammunition To Round Shot..!");  
+             
+           }                                                                                                  
+           if(str=="explosive"){
+             ammotype="Mball";  
+             llShout(0,"Changing Ammunition To Explosive Shot..!");    
+           }                                                                                               }
+            
+         
+           
+    }
+        
+            
+     link_message(integer sender_num, integer num, string msg, key id) 
+    {
+          if(llToLower(msg)=="reset")llResetScript();
+          if(msg == "combat")combat = num;   
+    
+         if(num==1000){
+           port_cannons_allowed=(integer) msg;    
+         }
+          
+         if(num==2000){
+           star_cannons_allowed=(integer) msg;    
+         } 
+           
+         if(num==3000){
+           bow_cannons_allowed=(integer) msg;    
+         } 
+         
+         if(num==4000){
+           rear_cannons_allowed=(integer) msg;    
+         } 
+           
+         if(num==5000){
+            linkcannons(); 
+         }
+         
+         if(msg=="drop cannon"){
+           string side = "";
+           length = llGetListLength(cannons);
+           integer link_number = 0;
+           integer dropcount = 0;
+           string name="";
+           for (i = 0; i < length; i=i+3)
+            {
+                link_number = llList2Integer(cannons, i+1);
+                name = llGetSubString(llList2String(cannons, i),0,2); 
+                if (llList2String(llGetLinkPrimitiveParams(link_number,[PRIM_DESC]),0)=="ready" && (side=="" || side ==  name))
+                {
+                    setAlpha(link_number,0);
+                    llSetLinkPrimitiveParamsFast(link_number,[PRIM_DESC,"droped"]);
+                    dropcount++;
+                    if(name=="stb" && name != "bow") 
+                       side = "prt";
+                    else if(name=="prt" && name != "bow") 
+                       side = "stb";
+                       
+                    llMessageLinked(LINK_ROOT,8000, llList2String(cannons, i),"");
+                       
+                }
+                    
+                
+                if(dropcount==2) i = length;           
+                 
+            }    
+             
+              
+         } 
+           
+         if(msg=="cannon_stat"){
+            getDropedCannons();  
+         }       
+         
+         if(msg=="cannons off"){
+            lockCannons(TRUE);
+             
+                          
+          }
+          
+          if(msg=="cannons on"){
+            lockCannons(FALSE); 
+                          
+          }
+          
+         if(msg=="fire"){
+              
+              llLinkParticleSystem(stern,[                   
+                                    PSYS_PART_FLAGS , 0 
+                                    | PSYS_PART_BOUNCE_MASK             
+                                    | PSYS_PART_INTERP_COLOR_MASK
+                                    | PSYS_PART_INTERP_SCALE_MASK
+                                    | PSYS_PART_FOLLOW_VELOCITY_MASK
+                                    | PSYS_PART_EMISSIVE_MASK,
+                                    PSYS_SRC_PATTERN,PSYS_SRC_PATTERN_EXPLODE 
+                                    ,PSYS_SRC_TEXTURE,"af8eacf6-44b7-51a8-9045-443f4093d97a"
+                                    ,PSYS_SRC_MAX_AGE,           0.0                
+                                    ,PSYS_PART_MAX_AGE,          3.0                
+                                    ,PSYS_SRC_BURST_RATE,        0.02               
+                                    ,PSYS_SRC_BURST_PART_COUNT,  256                
+                                    ,PSYS_SRC_BURST_RADIUS,      0.0                
+                                    ,PSYS_SRC_BURST_SPEED_MIN,   0.0                
+                                    ,PSYS_SRC_BURST_SPEED_MAX,   .75                
+                                    ,PSYS_SRC_ACCEL,             <0.0,0.0,.75>     
+                                    ,PSYS_PART_START_COLOR,      <5.0,0.0,0.0>
+                                    ,PSYS_PART_END_COLOR,        <0.8,1.0,0.0>
+                                    ,PSYS_PART_START_ALPHA,      0.9          
+                                    ,PSYS_PART_END_ALPHA,        0.0          
+                                    ,PSYS_PART_START_SCALE,      <3,3,0.0>    
+                                    ,PSYS_PART_END_SCALE,        <1,1,0.0> 
+                                    ,PSYS_SRC_ANGLE_BEGIN,       PI        
+                                    ,PSYS_SRC_ANGLE_END,         PI        
+                                    ,PSYS_SRC_OMEGA,             <0.0,0.0,0.0>
+                                    ]);
+                                    
+           llLinkParticleSystem(bow,[                   
+                                    PSYS_PART_FLAGS , 0 
+                                    | PSYS_PART_BOUNCE_MASK             
+                                    | PSYS_PART_INTERP_COLOR_MASK
+                                    | PSYS_PART_INTERP_SCALE_MASK
+                                    | PSYS_PART_FOLLOW_VELOCITY_MASK
+                                    | PSYS_PART_EMISSIVE_MASK,
+                                    PSYS_SRC_PATTERN,PSYS_SRC_PATTERN_EXPLODE 
+                                    ,PSYS_SRC_TEXTURE,"af8eacf6-44b7-51a8-9045-443f4093d97a"
+                                    ,PSYS_SRC_MAX_AGE,           0.0                
+                                    ,PSYS_PART_MAX_AGE,          3.0                
+                                    ,PSYS_SRC_BURST_RATE,        0.02               
+                                    ,PSYS_SRC_BURST_PART_COUNT,  256                
+                                    ,PSYS_SRC_BURST_RADIUS,      0.0                
+                                    ,PSYS_SRC_BURST_SPEED_MIN,   0.0                
+                                    ,PSYS_SRC_BURST_SPEED_MAX,   .75                
+                                    ,PSYS_SRC_ACCEL,             <0.0,0.0,.75>     
+                                    ,PSYS_PART_START_COLOR,      <5.0,0.0,0.0>
+                                    ,PSYS_PART_END_COLOR,        <0.8,1.0,0.0>
+                                    ,PSYS_PART_START_ALPHA,      0.9          
+                                    ,PSYS_PART_END_ALPHA,        0.0          
+                                    ,PSYS_PART_START_SCALE,      <3,3,0.0>    
+                                    ,PSYS_PART_END_SCALE,        <1,1,0.0> 
+                                    ,PSYS_SRC_ANGLE_BEGIN,       PI        
+                                    ,PSYS_SRC_ANGLE_END,         PI        
+                                    ,PSYS_SRC_OMEGA,             <0.0,0.0,0.0>
+                                    ]);
+                                                                                                                                                } 
+            
+                                                                                                                                                                      
+    }   
+        
+            
+        
+        
+    timer()
+    {
+             
+        timer_on = FALSE;    
+        length = llGetListLength(cannons);
+        for (i = 0; i < length; i=i+3)
+        {
+            integer linknum = llList2Integer(cannons, i+1);
+            list deslist=llGetLinkPrimitiveParams(linknum,[PRIM_DESC]);
+            string des=(llList2String(deslist,0));
+            if (des == "ready" || des=="droped")
+            {
+            }
+            else
+            {
+                integer des2=(llList2Integer(deslist,0));
+                if (des2 == 1)
+                {
+                    llSetLinkPrimitiveParamsFast(linknum,[PRIM_DESC,"ready",PRIM_TEXT,"",<1,1,1>,1.0]);
+                }
+                else if (des2 <= DELAY)
+                {
+                    timer_on = TRUE;
+                    des2 = des2-1;
+                    llSetLinkPrimitiveParamsFast(linknum,[PRIM_DESC,(string)des2]);
+                }
+            }  
+            
+        }
+        if(timer_on==FALSE){
+          llSetTimerEvent(0.0);
+        }            
+    }
+}
